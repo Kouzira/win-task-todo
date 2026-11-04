@@ -210,6 +210,8 @@ Only one watcher runs at a time: the lock is `%LOCALAPPDATA%\win-task-todo\watch
 
 In `task list` and `task ui`, the watcher task has the state "Watcher". `delete`, `off`, `on`, `run` and `skip` on it ask one more question that says plainly it is the watcher.
 
+Stale cards: if the cards look out of date, read `watch.log` (the log below). A refresh that fails (Task Scheduler sometimes answers "One or more errors occurred" while a task is being changed) is logged with its message and the time of the next try, and the watcher retries after 30 seconds, then 60, then every 120 seconds until one succeeds, so a card is stale for about two minutes at most. One line, "refresh recovered after N failures", marks the end of such a run of errors.
+
 Memory: the watcher is one Node process; measured on this machine on 4 November 2026 it used about 35 MB of working set when fresh and 38 MB after a few wake-ups. Between wake-ups it holds only a timer. Each refresh runs PowerShell a few times, about a second each, then exits.
 
 The log is `%LOCALAPPDATA%\win-task-todo\watch.log`, at most about 1 MB; when full, the old file becomes `watch.log.1` (only one old file is kept). The state (which cards were posted, which runs were seen, which tasks have their own ID) is in `state.json` in the same folder.
