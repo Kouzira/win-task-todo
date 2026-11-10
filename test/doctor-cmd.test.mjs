@@ -11,6 +11,11 @@ const NOW = new Date('2026-11-04T12:00:00');
 const WATCH_CMD = 'conhost.exe --headless "C:\\Tools\\node.exe" "D:\\tools\\win-task-todo\\tasks.mjs" watch';
 const idOf = (name) => appIdOf(cardTag({ path: '\\', name }));
 const text = (d) => d.captured.out.join('\n');
+// The files the canned tasks in helpers.mjs point at, so a healthy machine has them.
+const TASK_FILES = [
+  'C:\\Users\\alice\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe',
+  'D:\\Scripts\\backup.ps1', 'D:\\Scripts\\report-sync.ps1', 'D:\\Scripts\\cleanup.bat',
+];
 const WRITERS = /SetValue|CreateSubKey|DeleteSubKey|\.Show\(|History\.(Remove|Clear)|Register-ScheduledTask|Unregister-|Enable-|Disable-|Start-ScheduledTask|Stop-|Set-|New-Item|Remove-Item/;
 
 // A machine where everything works: the watcher runs, two cards were posted
@@ -23,7 +28,7 @@ async function healthy(over = {}) {
   files.mtimes.set('state.json', NOW.getTime() - 10 * 60000);
   const d = toastDeps({
     files, share: first, tasks: [...TASKS, WATCHER], clock: first.clock, alive: new Set([777]), cmdlines: { 777: WATCH_CMD },
-    env: { PATH: 'C:\\Windows;C:\\Tools' }, pathFiles: ['C:\\Tools\\task.cmd'], ...over,
+    env: { PATH: 'C:\\Windows;C:\\Tools' }, pathFiles: ['C:\\Tools\\task.cmd', ...TASK_FILES], ...over,
   });
   return { d, files };
 }

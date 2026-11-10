@@ -56,6 +56,12 @@ task off "Nightly cleanup"
 
 A command that starts with `powershell` or `pwsh`, or ends with `.ps1`, runs with `-NoProfile -ExecutionPolicy Bypass`. Any other command runs as typed through `cmd.exe /c`.
 
+After the plan and before the question, `add` checks the command and prints one `Warning:` line for each problem it finds: a shell variable left unfilled in the text (such as `C:\Folder$script`, where the shell that built the line never set `script`), or a full Windows path (`C:\Tools\app\run.mjs`) that does not exist. The warning is advice only: with `--yes` the task is still created, and `--dry-run` prints the warnings too, because the file may be about to be written. Paths that only receive output (after `>`, `>>` or `--log`), folders ending in a backslash, wildcards, and anything the checker cannot read with confidence are not reported.
+
+```
+Warning: The path C:\Tools\app\run.mjs does not exist. The task may fail when it runs.
+```
+
 Schedule forms (case-insensitive):
 
 - `daily 10:00`
@@ -262,6 +268,7 @@ The log is `%LOCALAPPDATA%\win-task-todo\watch.log`, at most about 1 MB; when fu
 | Windows notification settings | Read from `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\<app id>`. A missing value means the Windows default, on. `Enabled=0` or `ShowInActionCenter=0` is a failure (the card cannot appear or stay in the Notification Center); `ShowBanner=0` is a warning (no banner, the card still appears there). `ToastEnabled=0` under `PushNotifications` means notifications are off for the whole account. Fix: Settings > System > Notifications. |
 | Do not disturb / Focus | Not checked: Windows does not keep it where it can be read cheaply. The report names the setting to look at. |
 | Toast history | Asks Windows whether it holds the card of each task that should have one. A card that was posted and is gone was closed or cleared (`task notify` posts it again); a card never posted needs `task notify`; a task Windows blocks is a failure. |
+| Task commands | Reads the program and arguments of each of your own tasks (as `task show` does; the watcher, helper and system tasks are skipped) and reports a missing path or an unfilled variable, with the same rules as the warning in `task add`. One warning per task, with a `Fix:` line: delete the task and add it again with the right path. When none has a problem, one `ok` line. Nothing is changed. |
 | Last refresh | The age of `state.json`, which every refresh writes. Beyond 35 minutes with a live watcher is a warning, because the watcher sleeps 30 minutes at most. A failed refresh still last in `watch.log` is a warning too. |
 
 A routine card is posted silently: it sits in the Notification Center (Win+N) and gives no banner and no sound. Only the card of a run that has just ended pops up. If every line is `ok` and a card still seems missing, look in the Notification Center before looking for a banner.
