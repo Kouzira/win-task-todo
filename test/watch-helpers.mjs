@@ -4,6 +4,7 @@
 // scheduler scripts on to the fake of helpers.mjs. Nothing here reaches the
 // real notifications, registry or Task Scheduler.
 import assert from 'node:assert/strict';
+import { isSettingsScript } from '../lib/doctor-probe.mjs';
 import { isRegistryScript } from '../lib/registry.mjs';
 import { GROUP, isHistoryScript, isPostScript } from '../lib/toast.mjs';
 import { INFO, TASKS, fakeDeps } from './helpers.mjs';
@@ -23,6 +24,7 @@ export const decode = (script) => {
 
 export function memoryFiles(init = {}) {
   const store = new Map(Object.entries(init));
+  const mtimes = new Map();
   const watchers = new Set();
   const changed = (n) => { for (const w of [...watchers]) w(n); };
   return {
@@ -32,6 +34,8 @@ export function memoryFiles(init = {}) {
     write: (n, t) => { store.set(n, t); changed(n); },
     append: (n, t) => store.set(n, (store.get(n) ?? '') + t),
     size: (n) => (store.has(n) ? Buffer.byteLength(store.get(n)) : 0),
+    mtime: (n) => (mtimes.has(n) ? mtimes.get(n) : null),
+    mtimes,
     pathOf: (n) => `C:\\mem\\win-task-todo\\${n}`,
     rename: (a, b) => { if (store.has(a)) { store.set(b, store.get(a)); store.delete(a); } },
     claim: (a, b) => { if (!store.has(a)) return false; store.set(b, store.get(a)); store.delete(a); return true; },
@@ -57,7 +61,7 @@ export const flush = () => new Promise((r) => setImmediate(r));
 // opts: everything fakeDeps takes, plus files, installed, setting, cmdlines
 // (pid to command line), alive (a Set of pids), clock ({ now: Date }).
 export function toastDeps(opts = {}) {
-  const base = fakeDeps({ tasks: opts.tasks ?? TASKS, info: opts.info ?? INFO, answer: opts.answer ?? 'n', now: opts.now });
+  const base = fakeDeps({ tasks: opts.tasks ?? TASKS, info: opts.info ?? INFO, answer: opts.answer ?? 'n', now: opts.now, dirs: opts.dirs, logs: opts.logs });
   const clock = opts.clock ?? { now: opts.now ?? new Date('2026-11-04T12:00:00') };
   // center: the card tags now in the simulated Notification Center; ids: the
   // per-task IDs in the simulated registry; blocked: IDs whose notifications
@@ -72,6 +76,7 @@ export function toastDeps(opts = {}) {
   const registered = shared?.registered ?? [];
   const unregistered = shared?.unregistered ?? [];
   const registry = [];
+  const settingsReads = [];
   const launched = [];
   const killed = [];
   const cmdlines = opts.cmdlines ?? {};
@@ -105,6 +110,11 @@ export function toastDeps(opts = {}) {
       const settings = Object.fromEntries(d.toasts.map((t) => [t.app, sim.blocked.has(t.app) ? 'DisabledForApplication' : 'Enabled']));
       return JSON.stringify({ installed: true, settings });
     }
+    if (isSettingsScript(script)) {
+      const d = decode(script);
+      settingsReads.push(d);
+      return JSON.stringify({ toastEnabled: sim.toastEnabled ?? null, apps: Object.fromEntries(d.ids.filter((id) => sim.settings?.[id]).map((id) => [id, sim.settings[id]])) });
+    }
     if (script.includes('GetSubKeyNames')) return JSON.stringify({ ids: [...sim.ids], scheme: sim.installed });
     if (isRegistryScript(script)) {
       registry.push({ script, data: decode(script) });
@@ -120,6 +130,8 @@ export function toastDeps(opts = {}) {
     now: () => clock.now,
     app: opts.files ?? memoryFiles(),
     systemRoot: 'C:\\Windows',
+    env: opts.env ?? {},
+    fileExists: (f) => (opts.pathFiles ?? []).includes(f),
     pid: opts.pid ?? 4242,
     bootMinute: () => 1000,
     isAlive: (pid) => alive.has(pid),
@@ -131,7 +143,7 @@ export function toastDeps(opts = {}) {
   };
   deps.sim = sim;
   deps.clock = clock;
-  deps.captured = { ...base.captured, posts, history, registry, launched, killed, removed, registered, unregistered };
+  deps.captured = { ...base.captured, settingsReads, posts, history, registry, launched, killed, removed, registered, unregistered };
   return deps;
 }
 

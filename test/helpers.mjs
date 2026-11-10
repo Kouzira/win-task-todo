@@ -35,7 +35,7 @@ const decode = (script) => {
   return JSON.parse(Buffer.from(m[1], 'base64').toString('utf8'));
 };
 
-export function fakeDeps({ tasks = TASKS, info = INFO, answer = 'n', now = new Date('2026-11-04T12:00:00'), logs, failOn = null } = {}) {
+export function fakeDeps({ tasks = TASKS, info = INFO, answer = 'n', now = new Date('2026-11-04T12:00:00'), logs, failOn = null, dirs = [], env = {} } = {}) {
   const out = [];
   const err = [];
   const writes = [];
@@ -64,6 +64,9 @@ export function fakeDeps({ tasks = TASKS, info = INFO, answer = 'n', now = new D
     now: () => now,
     nodePath: 'C:\\Tools\\node.exe',
     scriptPath: 'D:\\Projects\\win-task-todo\\tasks.mjs',
+    runnerPath: 'D:\\Projects\\win-task-todo\\run-logged.mjs',
+    dirExists: (d) => dirs.includes(d),
+    env,
     logs: logs ?? { dir: null, list: async () => [], tail: async () => [] },
     captured: { out, err, writes, asked },
   };

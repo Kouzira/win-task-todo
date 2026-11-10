@@ -21,8 +21,9 @@ After that, type `task` anywhere (the command runs through `task.cmd` in this fo
 | `task` or `task list` | Table of own tasks: Name, Schedule, Next run, Last run, Result, State, sorted by next run |
 | `task list --all` | Also system and vendor tasks (adds a Type column, a few seconds slower) |
 | `task list --json` | The same data as JSON for scripts |
+| `task list --project <label>` | Only the tasks with that project label (see "Project labels") |
 | `task show <name>` | Details of one task: command, arguments, working directory, schedule in words, account, runs, result, path |
-| `task add <name> <command> <schedule>` | Creates a task; always prints the plan and asks `Create this task? (y/N)` |
+| `task add <name> <command> <schedule>` | Creates a task; always prints the plan and asks `Create this task? (y/N)`. Options: `--cwd <dir>`, `--log`, `--project <label>` |
 | `task on <name>`, `task off <name>` | Turn on, turn off |
 | `task run <name>` | Run now |
 | `task delete <name>` | Delete; always asks `Delete this task? (y/N)` |
@@ -31,13 +32,18 @@ After that, type `task` anywhere (the command runs through `task.cmd` in this fo
 | `task log <name>` | Last run, result, and the tail of the task's log file, if a log folder is set (see "Task logs") |
 | `task notify` | Posts or updates the card of every task that runs today in the Notification Center, once, then exits |
 | `task watch` | The watcher that keeps the cards current, started at logon (`--install`, `--status`, `--stop`, `--uninstall`) |
-| `task help` | Short help |
+| `task doctor` | Checks, read only, why a card may not show, and how to fix it (see "task doctor") |
+| `task help [command]` | Short help, or the usage of one command |
+
+Every command also accepts `--help` or `-h`, in any position (`task notify --help`, `task watch --install -h`). It prints the usage and does nothing else: no task is touched, no card is posted, nothing is installed.
+
+After `add`, `on`, `off`, `delete`, `skip` and `unskip` succeed, the cards are refreshed at once (see "Cards after a change").
 
 At every `(y/N)` question, type `y` to agree or `n` to cancel. Pressing Enter alone does not answer: the question keeps waiting, because in cmd an empty line sometimes arrives by itself and used to cancel the question.
 
 Task names are case-insensitive but must match in full. A wrong name makes the command fail and list similar names.
 
-Options: `--yes` skips the confirmation question, `--dry-run` (for `add` and `skip`) prints the plan and stops, `--all`, `--json`.
+Options: `--yes` skips the confirmation question, `--dry-run` (for `add` and `skip`) prints the plan and stops, `--all`, `--json`, `--help` / `-h`. Options with a value, written `--cwd D:\scripts` or `--cwd=D:\scripts`: `--cwd` and `--project` (for `add`; `--project` also for `list`). `--log` (for `add`) takes no value.
 
 ## Examples
 
@@ -73,6 +79,32 @@ or a file `%LOCALAPPDATA%\win-task-todo\config.json`:
 ```
 
 Without either, `task log` says that no log folder is set and how to set one. A log is matched to a task by file name (`.log` or `.txt`, case-insensitive): the base name of the script the task runs (`backup.ps1` matches `backup.log`), or the task name with spaces written as hyphens (`Daily backup` matches `daily-backup.log`). The newest matching file wins. Only the end of the file is read.
+
+## Working directory, logging and project labels for a new task
+
+```powershell
+task add backup "D:\scripts\backup.ps1" "weekdays 18:00" --cwd D:\scripts --log --project "Office tools"
+```
+
+**`--cwd <dir>`** sets the working directory the task starts in; without it `task show` prints "(default)". The folder must be a full path and must exist, otherwise the command stops before anything is created. The plan shows it on a `Working dir:` line.
+
+**`--log`** makes the task write its output and its exit code to a log file that `task log` already reads: `<log folder>\<task name with spaces as hyphens>.log`, so the task "Daily backup" writes `Daily-backup.log`. The log folder is the one described in "Task logs" (`TASK_LOG_DIR`, then `config.json`); without one the command says how to set it and creates nothing. The plan shows the file on a `Log:` line.
+
+To do this the scheduled action is not the command itself but `node run-logged.mjs`, a small runner in this folder. The task's real program and arguments are handed to it as two quoted arguments (`--exe` and `--args`), and it starts the program with exactly the argument string Task Scheduler would have used. Each run adds a line `=== 2026-11-04 10:00:00 ===`, then the program's output (standard output and error together), then `exit <code>`. The runner ends with the program's exit code, so the result shown by `task list` is the program's own. Before a run, a log larger than about 1 MB becomes `<name>.log.1` (one old file is kept), so the log stays near that size. The action holds the full paths of `node.exe` and of the runner, so if either is moved, add the task again. A task made without `--log` is exactly as before.
+
+**`--project <label>`** is described next.
+
+## Project labels
+
+`task add --project <label>` keeps a label (one line, up to 60 characters) in the task's description, on a line `tasks-project:<label>` after the marker `Created by the tasks tool`. Tasks made before labels existed have no such line and still count as the tool's own.
+
+- `task list --project <label>` shows only the tasks with that label (case-insensitive).
+- `task list` adds a Project column only when at least one task has a label, so a list without labels looks as it always did. `task list --json` always has a `project` field (`null` when there is none).
+- `task show <name>` prints a `Project` row.
+
+## Cards after a change
+
+The watcher sleeps up to 30 minutes between refreshes, so a change used to show on the cards only at its next wake-up. Now `add`, `on`, `off`, `delete`, `skip` and `unskip` refresh the cards themselves right after the change succeeded, with the same function as `task notify`, and print one line, `Cards updated.` Not after `--dry-run`, not when the question was answered no, and not after `run`. It is best effort: only when the notification part is installed (otherwise nothing is said), and if the refresh fails the command still succeeds and says that the watcher will update the cards later.
 
 ## task skip and task unskip
 
@@ -215,6 +247,24 @@ Stale cards: if the cards look out of date, read `watch.log` (the log below). A 
 Memory: the watcher is one Node process; measured on this machine on 4 November 2026 it used about 35 MB of working set when fresh and 38 MB after a few wake-ups. Between wake-ups it holds only a timer. Each refresh runs PowerShell a few times, about a second each, then exits.
 
 The log is `%LOCALAPPDATA%\win-task-todo\watch.log`, at most about 1 MB; when full, the old file becomes `watch.log.1` (only one old file is kept). The state (which cards were posted, which runs were seen, which tasks have their own ID) is in `state.json` in the same folder.
+
+## task doctor
+
+`task doctor` explains why a card might not show. It is read only: it creates, changes and posts nothing (the registry is opened for reading, and Windows' toast history is only asked). It prints one line per check, marked `ok`, `info`, `WARN` or `FAIL`; a failing line has a `Fix:` line under it, and the last line is a verdict. The exit code is 1 when something failed, otherwise 0.
+
+| Check | What a finding means |
+| :- | :- |
+| `task` on PATH | No `task.cmd` (or `task.exe`, `task.bat`) in a PATH folder: typing `task` fails. Cards do not need it. Warning. |
+| Notification part | The `wintasktodo:` registry key is missing: no card can be posted. Fix: `task notify --install`. |
+| Logon task | The task `win-task-todo watch` is missing or off: the watcher will not start at logon. |
+| Watcher process | Not running, or `watch.pid` names a dead or foreign process (a stale lock, replaced by the next watcher). Fix: `task run "win-task-todo watch"`. |
+| App ID per card | A task that should have a card today (not done, not off, not closed) has no `WinTaskTodo.<id>` key: Windows cannot show its card. Fix: `task notify`. |
+| Windows notification settings | Read from `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\<app id>`. A missing value means the Windows default, on. `Enabled=0` or `ShowInActionCenter=0` is a failure (the card cannot appear or stay in the Notification Center); `ShowBanner=0` is a warning (no banner, the card still appears there). `ToastEnabled=0` under `PushNotifications` means notifications are off for the whole account. Fix: Settings > System > Notifications. |
+| Do not disturb / Focus | Not checked: Windows does not keep it where it can be read cheaply. The report names the setting to look at. |
+| Toast history | Asks Windows whether it holds the card of each task that should have one. A card that was posted and is gone was closed or cleared (`task notify` posts it again); a card never posted needs `task notify`; a task Windows blocks is a failure. |
+| Last refresh | The age of `state.json`, which every refresh writes. Beyond 35 minutes with a live watcher is a warning, because the watcher sleeps 30 minutes at most. A failed refresh still last in `watch.log` is a warning too. |
+
+A routine card is posted silently: it sits in the Notification Center (Win+N) and gives no banner and no sound. Only the card of a run that has just ended pops up. If every line is `ok` and a card still seems missing, look in the Notification Center before looking for a banner.
 
 ## Safety
 
